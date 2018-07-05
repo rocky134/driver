@@ -9,12 +9,16 @@
 #include "wilc_wlan_if.h"
 #include "wilc_wlan.h"
 #include "wilc_wfi_netdevice.h"
+#include "wilc_gpio.h"
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/sdio_ids.h>
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/host.h>
 #include <linux/of_gpio.h>
+
+
+struct wilc_gpio wilc_gpio;
 
 void chip_wakeup(struct wilc *wilc, int source);
 void chip_allow_sleep(struct wilc *wilc, int source);
@@ -130,16 +134,9 @@ static int linux_sdio_probe(struct sdio_func *func,
 {
 	struct wilc *wilc;
 	int ret, io_type;
-	static bool init_power;
-
-	int gpio_reset = -1;
-	int gpio_chip_en = -1;
-	int gpio_irq = -1;
-
 	struct device_node *cnp;
-
-	cnp = of_get_child_by_name(func->card->host->parent->of_node,
-				   "wilc_sdio");
+	
+	cnp = func->card->host->parent->of_node;
 
 	if (IS_ENABLED(CONFIG_WILC_HW_OOB_INTR))
 		io_type = HIF_SDIO_GPIO_IRQ;
@@ -153,49 +150,6 @@ static int linux_sdio_probe(struct sdio_func *func,
 	}
 	sdio_set_drvdata(func, wilc);
 	wilc->dev = &func->dev;
-
-	gpio_reset = of_get_named_gpio_flags(cnp, "gpio_reset", 0, NULL);
-	if (gpio_reset < 0) {
-		ret = gpio_reset;
-		gpio_reset = GPIO_NUM_RESET;
-		dev_warn(wilc->dev, 
-			 "WILC setting default Reset GPIO to %d. Got %d\r\n",
-			 gpio_reset, ret);
-	} else {
-		dev_info(wilc->dev, "WILC got %d for gpio_reset\r\n",
-			 gpio_reset);
-	}
-
-	gpio_chip_en = of_get_named_gpio_flags(cnp, "gpio_chip_en", 0, NULL);
-	if (gpio_chip_en < 0) {
-		ret = gpio_chip_en;
-		gpio_chip_en = GPIO_NUM_CHIP_EN;
-		dev_warn(wilc->dev,
-			 "WILC setting default Chip Enable GPIO to %d. Got %d\r\n",
-			 gpio_chip_en, ret);
-	} else {
-		dev_info(wilc->dev, "WILC got %d for gpio_chip_en\r\n",
-			 gpio_chip_en);
-	}
-
-	gpio_irq = of_get_named_gpio_flags(cnp, "gpio_irq", 0, NULL);
-	if (gpio_irq < 0) {
-		ret = gpio_irq;
-		gpio_irq = GPIO_NUM;
-		dev_warn(wilc->dev, "WILC setting default IRQ GPIO to %d. Got %d\r\n",
-			 gpio_irq, ret);
-	} else {
-		dev_info(wilc->dev, "WILC got %d for gpio_irq\r\n", gpio_irq);
-	}
-
-	wilc->gpio_irq = gpio_irq;
-	wilc->gpio_chip_en = gpio_chip_en;
-	wilc->gpio_reset = gpio_reset;
-
-	if (!init_power) {
-		wilc_wlan_power_on_sequence(wilc);
-		init_power = 1;
-	}
 
 	mutex_init(&wilc->hif_cs);
 	mutex_init(&wilc->cs);
@@ -306,9 +260,79 @@ static struct sdio_driver wilc_sdio_driver = {
 		.of_match_table = wilc_of_match,
 	}
 };
-module_driver(wilc_sdio_driver,
-	      sdio_register_driver,
-	      sdio_unregister_driver);
+
+static int __init wilc_sdio_driver_init(void) 
+{ 
+	struct device_node *cnp;
+	int ret;
+	int gpio_reset = -1;
+	int gpio_chip_en = -1;
+	int gpio_irq = -1;
+
+	cnp = of_find_node_by_name(NULL, SDIO_GPIO_NODE);
+	if (cnp == NULL){
+		printk(KERN_WARNING "Device tree \"%s\" not found, using default pin defs\n", SDIO_GPIO_NODE);
+		wilc_gpio.gpio_chip_en = GPIO_NUM_CHIP_EN;
+		wilc_gpio.gpio_irq = GPIO_NUM_IRQ;
+		wilc_gpio.gpio_reset = GPIO_NUM_RESET;
+	} else {
+		gpio_reset = of_get_named_gpio_flags(cnp, "gpio_reset", 0, NULL);
+		if (gpio_reset < 0) {
+			ret = gpio_reset;
+			gpio_reset = GPIO_NUM_RESET;
+			printk(KERN_WARNING "WILC setting default Reset GPIO to %d. Got %d\n",
+				 gpio_reset, ret);
+		} else {
+			printk(KERN_INFO "WILC got %d for gpio_reset\n",
+				 gpio_reset);
+		}
+
+		gpio_chip_en = of_get_named_gpio_flags(cnp, "gpio_chip_en", 0, NULL);
+		if (gpio_chip_en < 0) {
+			ret = gpio_chip_en;
+			gpio_chip_en = GPIO_NUM_CHIP_EN;
+			printk(KERN_WARNING "WILC setting default Chip Enable GPIO to %d. Got %d\n",
+				 gpio_chip_en, ret);
+		} else {
+			printk(KERN_INFO "WILC got %d for gpio_chip_en\n",
+				 gpio_chip_en);
+		}
+
+		gpio_irq = of_get_named_gpio_flags(cnp, "gpio_irq", 0, NULL);
+		if (gpio_irq < 0) {
+			ret = gpio_irq;
+			gpio_irq = GPIO_NUM_IRQ;
+			printk(KERN_WARNING "WILC setting default IRQ GPIO to %d. Got %d\n",
+				 gpio_irq, ret);
+		} else {
+			printk(KERN_INFO "WILC got %d for gpio_irq\n", gpio_irq);
+		}
+
+		wilc_gpio.gpio_chip_en = gpio_chip_en;
+		wilc_gpio.gpio_irq = gpio_irq;
+		wilc_gpio.gpio_reset = gpio_reset;
+
+		gpio_request_one(wilc_gpio.gpio_chip_en, GPIOF_INIT_LOW, "gpio_chip_en");
+		//gpio_request_one(wilc_gpio.gpio_irq, GPIOF_INIT_LOW, "gpio_irq");
+		gpio_request_one(wilc_gpio.gpio_reset, GPIOF_INIT_LOW, "gpio_reset");
+	}
+
+	printk(KERN_INFO "Enabling device\n");
+	wilc_wlan_power_on_sequence();
+	return sdio_register_driver(&wilc_sdio_driver); 
+} 
+module_init(wilc_sdio_driver_init); 
+
+static void __exit wilc_sdio_driver_exit(void) 
+{ 
+	gpio_free(wilc_gpio.gpio_chip_en);
+	gpio_free(wilc_gpio.gpio_irq);
+	gpio_free(wilc_gpio.gpio_reset);
+	sdio_unregister_driver(&wilc_sdio_driver); 
+} 
+module_exit(wilc_sdio_driver_exit);
+
+
 MODULE_LICENSE("GPL");
 
 static int wilc_sdio_enable_interrupt(struct wilc *dev)

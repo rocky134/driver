@@ -137,9 +137,9 @@
 #define LINUX_TX_SIZE	(64 * 1024)
 
 #define MODALIAS		"WILC_SPI"
-#define GPIO_NUM		0x5B
-#define GPIO_NUM_CHIP_EN	94
-#define GPIO_NUM_RESET		60
+#define GPIO_NUM_IRQ		4
+#define GPIO_NUM_CHIP_EN	5
+#define GPIO_NUM_RESET		6
 
 
 #define NQUEUES			4
@@ -341,8 +341,8 @@ void chip_allow_sleep(struct wilc *wilc, int source);
 void chip_wakeup(struct wilc *wilc, int source);
 int wilc_send_config_pkt(struct wilc_vif *vif, u8 mode, struct wid *wids,
 			 u32 count, u32 drv);
-void wilc_wlan_power_on_sequence(struct wilc *wilc);
-void wilc_wlan_power_off_sequence(struct wilc *wilc);
+void wilc_wlan_power_on_sequence(void);
+void wilc_wlan_power_off_sequence(void);
 
 void wilc_bt_init(struct wilc *wilc);
 void wilc_bt_deinit(void);

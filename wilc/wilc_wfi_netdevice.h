@@ -169,9 +169,9 @@ struct wilc {
 	const struct wilc_hif_func *hif_func;
 	int io_type;
 	int mac_status;
-	int gpio_irq;
-	int gpio_reset;
-	int gpio_chip_en;
+	//int gpio_irq;
+	//int gpio_reset;
+	//int gpio_chip_en;
 	bool initialized;
 	int dev_irq_num;
 	int close;

@@ -425,7 +425,7 @@ int wilc_bt_power_down(struct wilc *wilc, int source)
 		pr_warn("Another device is preventing power down. request source is %s\n",
 			(source == PWR_DEV_SRC_WIFI ? "Wifi" : "BT"));
 	} else {
-		wilc_wlan_power_off_sequence(wilc);
+		wilc_wlan_power_off_sequence();
 	}
 	wilc->power_status[source] = false;
 

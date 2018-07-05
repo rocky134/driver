@@ -2693,11 +2693,14 @@ static void handle_power_management(struct wilc_vif *vif,
 	s8 power_mode;
 
 	wid.id = (u16)WID_POWER_MANAGEMENT;
+	
 
 	if (pm_param->enabled)
 		power_mode = MIN_FAST_PS;
 	else
 		power_mode = NO_POWERSAVE;
+
+	power_mode = NO_POWERSAVE;
 	PRINT_INFO(vif->ndev, HOSTINF_DBG, "Handling power mgmt to %d\n", power_mode);
 	wid.val = &power_mode;
 	wid.size = sizeof(char);
